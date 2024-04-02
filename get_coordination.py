@@ -14,7 +14,7 @@ def all_atoms(crystal):
 def int_atoms(crystal, which='Al'):
     is_in_middle = lambda x: all(1 <= i <= 2 for i in x)
 
-    return [ a for a in sorted(crystal.supercell(3, 3, 3)) if a.symbol == which and is_in_middle(a.coords_fractional) ]
+    return [ a for a in sorted(crystal.supercell(3, 3, 3)) if a.symbol.startswith(which) and is_in_middle(a.coords_fractional) ]
 
 
 def lowest_distances(atom, atoms_other):
@@ -26,7 +26,12 @@ def lowest_distances(atom, atoms_other):
 
 
 def angle(r1, r2):
-    return np.arccos(np.dot(r1, r2)/np.sqrt(np.dot(r1, r1) * np.dot(r2, r2))) * 180/np.pi
+    cos = np.dot(r1, r2)/np.sqrt(np.dot(r1, r1) * np.dot(r2, r2))
+    if cos < -1:
+        cos += 1
+    if cos > 1:
+        cos -= 1
+    return np.arccos(cos) * 180/np.pi
 
 
 def in_range(value, midpoint, width):
@@ -91,15 +96,17 @@ if __name__ == '__main__':
         content = ' \t' + '\t'.join(str(i) for i in range(LEN)) + '\n' + \
             '\n'.join((f'{i}\t' + ' \t'*i + 'x\t' + '\t'.join(f'{angles_pairwise[(i, j)]:.2f}' for j in range(i+1, LEN))) for i in range(LEN));
 
-        with open(f'{prefix}/{prefix}_{ATOM_OF_INTEREST}{str(n).zfill(2)}_angles.csv', 'w') as f:
+        with open(f'{prefix}/{prefix}_{ATOM_OF_INTEREST}{str(n).zfill(2)}_angles.txt', 'w') as f:
             f.write(content)
 
         # octohedral coordination check
         angles_oct = sorted([ a for (i, j), a in angles_pairwise.items() if i < 6 and j < 6 ])
 
         distance_cond_oct = all(a[1] < sa[0][1] * DISTANCE_TOL_C6 for a in sa[:6])
-        angle_cond_oct = all(in_range(a, ANGLE_VAL_C6_MIN, ANGLE_TOL_C6_MIN) for a in angles_oct[:-3]) and \
-            all(in_range(a, ANGLE_VAL_C6_MAJ, ANGLE_TOL_C6_MAJ) for a in angles_oct[-3:])
+        angle_cond_oct = (all(in_range(a, ANGLE_VAL_C6_MIN, ANGLE_TOL_C6_MIN) for a in angles_oct[:-3]) and \
+            all(in_range(a, ANGLE_VAL_C6_MAJ, ANGLE_TOL_C6_MAJ) for a in angles_oct[-3:])) or \
+            (all(in_range(a, ANGLE_VAL_C6_MIN, ANGLE_TOL_C6_MIN) for a in angles_oct[3:]) and \
+            all(a < ANGLE_TOL_C6_MAJ for a in angles_oct[:3]))
 
         if distance_cond_oct and angle_cond_oct:
             coordinations[n] = 6
